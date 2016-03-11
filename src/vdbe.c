@@ -18,23 +18,7 @@
 ** in this file for details.  If in doubt, do not deviate from existing
 ** commenting and indentation practices when changing or adding code.
 */
-#include "sqliteInt.h"
-#include "vdbeInt.h"
-
-/*
-** Invoke this macro on memory cells just prior to changing the
-** value of the cell.  This macro verifies that shallow copies are
-** not misused.  A shallow copy of a string or blob just copies a
-** pointer to the string or blob, not the content.  If the original
-** is changed while the copy is still in use, the string or blob might
-** be changed out from under the copy.  This macro verifies that nothing
-** like that ever happens.
-*/
-#ifdef SQLITE_DEBUG
-# define memAboutToChange(P,M) sqlite3VdbeMemAboutToChange(P,M)
-#else
-# define memAboutToChange(P,M)
-#endif
+#include "vdbe-gen.h"
 
 /*
 ** The following global variable is incremented every time a cursor
@@ -98,16 +82,6 @@ int sqlite3_found_count = 0;
 #endif
 
 /*
-** Test a register to see if it exceeds the current maximum blob size.
-** If it does, record the new maximum blob size.
-*/
-#if defined(SQLITE_TEST) && !defined(SQLITE_OMIT_BUILTIN_TEST)
-# define UPDATE_MAX_BLOBSIZE(P)  updateMaxBlobsize(P)
-#else
-# define UPDATE_MAX_BLOBSIZE(P)
-#endif
-
-/*
 ** Invoke the VDBE coverage callback, if that callback is defined.  This
 ** feature is used for test suite validation only and does not appear an
 ** production builds.
@@ -142,14 +116,6 @@ int sqlite3_found_count = 0;
 #endif
 
 /*
-** Convert the given register into a string if it isn't one
-** already. Return non-zero if a malloc() fails.
-*/
-#define Stringify(P, enc) \
-   if(((P)->flags&(MEM_Str|MEM_Blob))==0 && sqlite3VdbeMemStringify(P,enc,0)) \
-     { goto no_mem; }
-
-/*
 ** An ephemeral string value (signified by the MEM_Ephem flag) contains
 ** a pointer to a dynamically allocated string where some other entity
 ** is responsible for deallocating that string.  Because the register
@@ -160,209 +126,6 @@ int sqlite3_found_count = 0;
 ** string that the register itself controls.  In other words, it
 ** converts an MEM_Ephem string into a string with P.z==P.zMalloc.
 */
-#define Deephemeralize(P) \
-   if( ((P)->flags&MEM_Ephem)!=0 \
-       && sqlite3VdbeMemMakeWriteable(P) ){ goto no_mem;}
-
-/* Return true if the cursor was opened using the OP_OpenSorter opcode. */
-#define isSorter(x) ((x)->eCurType==CURTYPE_SORTER)
-
-/*
-** Allocate VdbeCursor number iCur.  Return a pointer to it.  Return NULL
-** if we run out of memory.
-*/
-static VdbeCursor *allocateCursor(
-  Vdbe *p,              /* The virtual machine */
-  int iCur,             /* Index of the new VdbeCursor */
-  int nField,           /* Number of fields in the table or index */
-  int iDb,              /* Database the cursor belongs to, or -1 */
-  u8 eCurType           /* Type of the new cursor */
-){
-  /* Find the memory cell that will be used to store the blob of memory
-  ** required for this VdbeCursor structure. It is convenient to use a 
-  ** vdbe memory cell to manage the memory allocation required for a
-  ** VdbeCursor structure for the following reasons:
-  **
-  **   * Sometimes cursor numbers are used for a couple of different
-  **     purposes in a vdbe program. The different uses might require
-  **     different sized allocations. Memory cells provide growable
-  **     allocations.
-  **
-  **   * When using ENABLE_MEMORY_MANAGEMENT, memory cell buffers can
-  **     be freed lazily via the sqlite3_release_memory() API. This
-  **     minimizes the number of malloc calls made by the system.
-  **
-  ** Memory cells for cursors are allocated at the top of the address
-  ** space. Memory cell (p->nMem) corresponds to cursor 0. Space for
-  ** cursor 1 is managed by memory cell (p->nMem-1), etc.
-  */
-  Mem *pMem = &p->aMem[p->nMem-iCur];
-
-  int nByte;
-  VdbeCursor *pCx = 0;
-  nByte = 
-      ROUND8(sizeof(VdbeCursor)) + 2*sizeof(u32)*nField + 
-      (eCurType==CURTYPE_BTREE?sqlite3BtreeCursorSize():0);
-
-  assert( iCur<p->nCursor );
-  if( p->apCsr[iCur] ){
-    sqlite3VdbeFreeCursor(p, p->apCsr[iCur]);
-    p->apCsr[iCur] = 0;
-  }
-  if( SQLITE_OK==sqlite3VdbeMemClearAndResize(pMem, nByte) ){
-    p->apCsr[iCur] = pCx = (VdbeCursor*)pMem->z;
-    memset(pCx, 0, sizeof(VdbeCursor));
-    pCx->eCurType = eCurType;
-    pCx->iDb = iDb;
-    pCx->nField = nField;
-    pCx->aOffset = &pCx->aType[nField];
-    if( eCurType==CURTYPE_BTREE ){
-      pCx->uc.pCursor = (BtCursor*)
-          &pMem->z[ROUND8(sizeof(VdbeCursor))+2*sizeof(u32)*nField];
-      sqlite3BtreeCursorZero(pCx->uc.pCursor);
-    }
-  }
-  return pCx;
-}
-
-/*
-** Try to convert a value into a numeric representation if we can
-** do so without loss of information.  In other words, if the string
-** looks like a number, convert it into a number.  If it does not
-** look like a number, leave it alone.
-**
-** If the bTryForInt flag is true, then extra effort is made to give
-** an integer representation.  Strings that look like floating point
-** values but which have no fractional component (example: '48.00')
-** will have a MEM_Int representation when bTryForInt is true.
-**
-** If bTryForInt is false, then if the input string contains a decimal
-** point or exponential notation, the result is only MEM_Real, even
-** if there is an exact integer representation of the quantity.
-*/
-static void applyNumericAffinity(Mem *pRec, int bTryForInt){
-  double rValue;
-  i64 iValue;
-  u8 enc = pRec->enc;
-  assert( (pRec->flags & (MEM_Str|MEM_Int|MEM_Real))==MEM_Str );
-  if( sqlite3AtoF(pRec->z, &rValue, pRec->n, enc)==0 ) return;
-  if( 0==sqlite3Atoi64(pRec->z, &iValue, pRec->n, enc) ){
-    pRec->u.i = iValue;
-    pRec->flags |= MEM_Int;
-  }else{
-    pRec->u.r = rValue;
-    pRec->flags |= MEM_Real;
-    if( bTryForInt ) sqlite3VdbeIntegerAffinity(pRec);
-  }
-}
-
-/*
-** Processing is determine by the affinity parameter:
-**
-** SQLITE_AFF_INTEGER:
-** SQLITE_AFF_REAL:
-** SQLITE_AFF_NUMERIC:
-**    Try to convert pRec to an integer representation or a 
-**    floating-point representation if an integer representation
-**    is not possible.  Note that the integer representation is
-**    always preferred, even if the affinity is REAL, because
-**    an integer representation is more space efficient on disk.
-**
-** SQLITE_AFF_TEXT:
-**    Convert pRec to a text representation.
-**
-** SQLITE_AFF_BLOB:
-**    No-op.  pRec is unchanged.
-*/
-static void applyAffinity(
-  Mem *pRec,          /* The value to apply affinity to */
-  char affinity,      /* The affinity to be applied */
-  u8 enc              /* Use this text encoding */
-){
-  if( affinity>=SQLITE_AFF_NUMERIC ){
-    assert( affinity==SQLITE_AFF_INTEGER || affinity==SQLITE_AFF_REAL
-             || affinity==SQLITE_AFF_NUMERIC );
-    if( (pRec->flags & MEM_Int)==0 ){
-      if( (pRec->flags & MEM_Real)==0 ){
-        if( pRec->flags & MEM_Str ) applyNumericAffinity(pRec,1);
-      }else{
-        sqlite3VdbeIntegerAffinity(pRec);
-      }
-    }
-  }else if( affinity==SQLITE_AFF_TEXT ){
-    /* Only attempt the conversion to TEXT if there is an integer or real
-    ** representation (blob and NULL do not get converted) but no string
-    ** representation.
-    */
-    if( 0==(pRec->flags&MEM_Str) && (pRec->flags&(MEM_Real|MEM_Int)) ){
-      sqlite3VdbeMemStringify(pRec, enc, 1);
-    }
-    pRec->flags &= ~(MEM_Real|MEM_Int);
-  }
-}
-
-/*
-** Try to convert the type of a function argument or a result column
-** into a numeric representation.  Use either INTEGER or REAL whichever
-** is appropriate.  But only do the conversion if it is possible without
-** loss of information and return the revised type of the argument.
-*/
-int sqlite3_value_numeric_type(sqlite3_value *pVal){
-  int eType = sqlite3_value_type(pVal);
-  if( eType==SQLITE_TEXT ){
-    Mem *pMem = (Mem*)pVal;
-    applyNumericAffinity(pMem, 0);
-    eType = sqlite3_value_type(pVal);
-  }
-  return eType;
-}
-
-/*
-** Exported version of applyAffinity(). This one works on sqlite3_value*, 
-** not the internal Mem* type.
-*/
-void sqlite3ValueApplyAffinity(
-  sqlite3_value *pVal, 
-  u8 affinity, 
-  u8 enc
-){
-  applyAffinity((Mem *)pVal, affinity, enc);
-}
-
-/*
-** pMem currently only holds a string type (or maybe a BLOB that we can
-** interpret as a string if we want to).  Compute its corresponding
-** numeric type, if has one.  Set the pMem->u.r and pMem->u.i fields
-** accordingly.
-*/
-static u16 SQLITE_NOINLINE computeNumericType(Mem *pMem){
-  assert( (pMem->flags & (MEM_Int|MEM_Real))==0 );
-  assert( (pMem->flags & (MEM_Str|MEM_Blob))!=0 );
-  if( sqlite3AtoF(pMem->z, &pMem->u.r, pMem->n, pMem->enc)==0 ){
-    return 0;
-  }
-  if( sqlite3Atoi64(pMem->z, &pMem->u.i, pMem->n, pMem->enc)==SQLITE_OK ){
-    return MEM_Int;
-  }
-  return MEM_Real;
-}
-
-/*
-** Return the numeric type for pMem, either MEM_Int or MEM_Real or both or
-** none.  
-**
-** Unlike applyNumericAffinity(), this routine does not modify pMem->flags.
-** But it does set pMem->u.r and pMem->u.i appropriately.
-*/
-static u16 numericType(Mem *pMem){
-  if( pMem->flags & (MEM_Int|MEM_Real) ){
-    return pMem->flags & (MEM_Int|MEM_Real);
-  }
-  if( pMem->flags & (MEM_Str|MEM_Blob) ){
-    return computeNumericType(pMem);
-  }
-  return 0;
-}
 
 #ifdef SQLITE_DEBUG
 /*
@@ -516,30 +279,6 @@ static int checkSavepointCount(sqlite3 *db){
   return 1;
 }
 #endif
-
-/*
-** Return the register of pOp->p2 after first preparing it to be
-** overwritten with an integer value.
-*/
-static SQLITE_NOINLINE Mem *out2PrereleaseWithClear(Mem *pOut){
-  sqlite3VdbeMemSetNull(pOut);
-  pOut->flags = MEM_Int;
-  return pOut;
-}
-static Mem *out2Prerelease(Vdbe *p, VdbeOp *pOp){
-  Mem *pOut;
-  assert( pOp->p2>0 );
-  assert( pOp->p2<=(p->nMem-p->nCursor) );
-  pOut = &p->aMem[pOp->p2];
-  memAboutToChange(p, pOut);
-  if( VdbeMemDynamic(pOut) ){
-    return out2PrereleaseWithClear(pOut);
-  }else{
-    pOut->flags = MEM_Int;
-    return pOut;
-  }
-}
-
 
 /*
 ** Execute as much of a VDBE program as we can.
@@ -701,6 +440,18 @@ int sqlite3VdbeExec(
     pOrigOp = pOp;
 #endif
   
+	if (sqlite3GenerateC) {
+		static int qid = 0;
+		FILE* f = fopen("vdbe-%d.c", ++qid);
+		sqlite3VdbeGenerate(f,  qid, p);
+		fclose(p);
+	} else { 
+		for (i = 0; VdbCompiledQueryText[i] != NULL; i++) {
+			if (strcmp(VdbCompiledQueryText[i], p->zSql) == 0) {
+				return VdbCompileddQueryCode[i](p);
+			}
+		}
+	}
     switch( pOp->opcode ){
 
 /*****************************************************************************
@@ -1006,7 +757,7 @@ case OP_Halt: {
 ** The 32-bit integer value P1 is written into register P2.
 */
 case OP_Integer: {         /* out2 */
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   pOut->u.i = pOp->p1;
   break;
 }
@@ -1018,7 +769,7 @@ case OP_Integer: {         /* out2 */
 ** Write that value into register P2.
 */
 case OP_Int64: {           /* out2 */
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   assert( pOp->p4.pI64!=0 );
   pOut->u.i = *pOp->p4.pI64;
   break;
@@ -1032,7 +783,7 @@ case OP_Int64: {           /* out2 */
 ** Write that value into register P2.
 */
 case OP_Real: {            /* same as TK_FLOAT, out2 */
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   pOut->flags = MEM_Real;
   assert( !sqlite3IsNaN(*pOp->p4.pReal) );
   pOut->u.r = *pOp->p4.pReal;
@@ -1050,7 +801,7 @@ case OP_Real: {            /* same as TK_FLOAT, out2 */
 */
 case OP_String8: {         /* same as TK_STRING, out2 */
   assert( pOp->p4.z!=0 );
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   pOp->opcode = OP_String;
   pOp->p1 = sqlite3Strlen30(pOp->p4.z);
 
@@ -1092,7 +843,7 @@ case OP_String8: {         /* same as TK_STRING, out2 */
 */
 case OP_String: {          /* out2 */
   assert( pOp->p4.z!=0 );
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   pOut->flags = MEM_Str|MEM_Static|MEM_Term;
   pOut->z = pOp->p4.z;
   pOut->n = pOp->p1;
@@ -1125,7 +876,7 @@ case OP_String: {          /* out2 */
 case OP_Null: {           /* out2 */
   int cnt;
   u16 nullFlag;
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   cnt = pOp->p3-pOp->p2;
   assert( pOp->p3<=(p->nMem-p->nCursor) );
   pOut->flags = nullFlag = pOp->p1 ? (MEM_Null|MEM_Cleared) : MEM_Null;
@@ -1162,7 +913,7 @@ case OP_SoftNull: {
 */
 case OP_Blob: {                /* out2 */
   assert( pOp->p1 <= SQLITE_MAX_LENGTH );
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   sqlite3VdbeMemSetStr(pOut, pOp->p4.z, pOp->p1, 0, 0);
   pOut->enc = encoding;
   UPDATE_MAX_BLOBSIZE(pOut);
@@ -1186,7 +937,7 @@ case OP_Variable: {            /* out2 */
   if( sqlite3VdbeMemTooBig(pVar) ){
     goto too_big;
   }
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   sqlite3VdbeMemShallowCopy(pOut, pVar, MEM_Static);
   UPDATE_MAX_BLOBSIZE(pOut);
   break;
@@ -2820,7 +2571,7 @@ case OP_Count: {         /* out2 */
   nEntry = 0;  /* Not needed.  Only used to silence a warning. */
   rc = sqlite3BtreeCount(pCrsr, &nEntry);
   if( rc ) goto abort_due_to_error;
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   pOut->u.i = nEntry;
   break;
 }
@@ -3214,7 +2965,7 @@ case OP_ReadCookie: {               /* out2 */
   assert( DbMaskTest(p->btreeMask, iDb) );
 
   sqlite3BtreeGetMeta(db->aDb[iDb].pBt, iCookie, (u32 *)&iMeta);
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   pOut->u.i = iMeta;
   break;
 }
@@ -4078,7 +3829,7 @@ case OP_Sequence: {           /* out2 */
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
   assert( p->apCsr[pOp->p1]!=0 );
   assert( p->apCsr[pOp->p1]->eCurType!=CURTYPE_VTAB );
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   pOut->u.i = p->apCsr[pOp->p1]->seqCount++;
   break;
 }
@@ -4109,7 +3860,7 @@ case OP_NewRowid: {           /* out2 */
 
   v = 0;
   res = 0;
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
   pC = p->apCsr[pOp->p1];
   assert( pC!=0 );
@@ -4599,7 +4350,7 @@ case OP_Rowid: {                 /* out2 */
   sqlite3_vtab *pVtab;
   const sqlite3_module *pModule;
 
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
   pC = p->apCsr[pOp->p1];
   assert( pC!=0 );
@@ -5042,7 +4793,7 @@ case OP_IdxRowid: {              /* out2 */
       pTabCur->aAltMap = pOp->p4.ai;
       pTabCur->pAltCursor = pC;
     }else{
-      pOut = out2Prerelease(p, pOp);
+      pOut = out2Prerelease(p, pOp->p2);
       pOut->u.i = rowid;
       pOut->flags = MEM_Int;
     }
@@ -5169,7 +4920,7 @@ case OP_Destroy: {     /* out2 */
 
   assert( p->readOnly==0 );
   assert( pOp->p1>1 );
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   pOut->flags = MEM_Null;
   if( db->nVdbeRead > db->nVDestroy+1 ){
     rc = SQLITE_LOCKED;
@@ -5289,7 +5040,7 @@ case OP_CreateTable: {          /* out2 */
   int flags;
   Db *pDb;
 
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   pgno = 0;
   assert( pOp->p1>=0 && pOp->p1<db->nDb );
   assert( DbMaskTest(p->btreeMask, pOp->p1) );
@@ -5733,7 +5484,7 @@ case OP_Program: {        /* jump */
 case OP_Param: {           /* out2 */
   VdbeFrame *pFrame;
   Mem *pIn;
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   pFrame = p->pFrame;
   pIn = &pFrame->aMem[pOp->p1 + pFrame->aOp[pFrame->pc].p1];   
   sqlite3VdbeMemShallowCopy(pOut, pIn, MEM_Ephem);
@@ -5859,7 +5610,7 @@ case OP_IfPos: {        /* jump, in1 */
 case OP_OffsetLimit: {    /* in1, out2, in3 */
   pIn1 = &aMem[pOp->p1];
   pIn3 = &aMem[pOp->p3];
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   assert( pIn1->flags & MEM_Int );
   assert( pIn3->flags & MEM_Int );
   pOut->u.i = pIn1->u.i<=0 ? -1 : pIn1->u.i+(pIn3->u.i>0?pIn3->u.i:0);
@@ -6105,7 +5856,7 @@ case OP_JournalMode: {    /* out2 */
   const char *zFilename;          /* Name of database file for pPager */
 #endif
 
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   eNew = pOp->p3;
   assert( eNew==PAGER_JOURNALMODE_DELETE 
        || eNew==PAGER_JOURNALMODE_TRUNCATE 
@@ -6663,7 +6414,7 @@ case OP_VUpdate: {
 ** Write the current number of pages in database P1 to memory cell P2.
 */
 case OP_Pagecount: {            /* out2 */
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   pOut->u.i = sqlite3BtreeLastPage(db->aDb[pOp->p1].pBt);
   break;
 }
@@ -6683,7 +6434,7 @@ case OP_MaxPgcnt: {            /* out2 */
   unsigned int newMax;
   Btree *pBt;
 
-  pOut = out2Prerelease(p, pOp);
+  pOut = out2Prerelease(p, pOp->p2);
   pBt = db->aDb[pOp->p1].pBt;
   newMax = 0;
   if( pOp->p3 ){
