@@ -362,7 +362,9 @@ int sqlite3_config(int op, ...){
 
   va_start(ap, op);
   switch( op ){
-
+    case SQLITE_CONFIG_CODEGEN:
+	  sqlite3GlobalConfig.bCodeGenerator = va_arg(ap, int);
+	  break;
     /* Mutex configuration options are only available in a threadsafe
     ** compile.
     */

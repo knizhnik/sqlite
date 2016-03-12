@@ -3123,6 +3123,7 @@ struct Sqlite3Config {
   int (*xTestCallback)(int);        /* Invoked by sqlite3FaultSim() */
 #endif
   int bLocaltimeFault;              /* True to fail localtime() calls */
+  int bCodeGenerator;
 };
 
 /*

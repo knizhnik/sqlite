@@ -1,18 +1,19 @@
 #include "vdbe-gen.h"
 
-extern int VdbeCompiledQueryCode_q1(Vdbe *p);
-extern char const* const VdbeCompiledQueryText;
+extern int VdbeCompiledQueryCodeQ1(Vdbe *p);
+extern char const* const VdbeCompiledQueryTextQ1;
 
 VdbeCompiledQuery const VdbeCompiledQueryCode[] = 
 {
-//	VdbeCompiledQueryCode_q1,
+	VdbeCompiledQueryCodeQ1,
 	NULL
-}
-char const* const VdbeCompiledQueryText[] = 
+};
+
+char const*const* const VdbeCompiledQueryText[] = 
 {
-//	VdbeCompiledQueryText_q1,
+	&VdbeCompiledQueryTextQ1,
 	NULL
-}
+};
 
 
 

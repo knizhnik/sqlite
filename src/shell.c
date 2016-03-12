@@ -4603,6 +4603,7 @@ static const char zOptions[] =
   "   -ascii               set output mode to 'ascii'\n"
   "   -bail                stop after hitting an error\n"
   "   -batch               force batch I/O\n"
+  "   -codegen             generate native query for queries\n"
   "   -column              set output mode to 'column'\n"
   "   -cmd COMMAND         run \"COMMAND\" before reading stdin\n"
   "   -csv                 set output mode to 'csv'\n"
@@ -4791,6 +4792,8 @@ int SQLITE_CDECL main(int argc, char **argv){
       if( szHeap>0x7fff0000 ) szHeap = 0x7fff0000;
       sqlite3_config(SQLITE_CONFIG_HEAP, malloc((int)szHeap), (int)szHeap, 64);
 #endif
+    }else if( strcmp(z,"-codegen")==0 ){
+      sqlite3_config(SQLITE_CONFIG_CODEGEN, 1);		
     }else if( strcmp(z,"-scratch")==0 ){
       int n, sz;
       sz = (int)integerValue(cmdline_option_value(argc,argv,++i));
@@ -4929,6 +4932,7 @@ int SQLITE_CDECL main(int argc, char **argv){
       ** crazy bytes in the middle of SQL statements for testing and debugging.
       */
       data.backslashOn = 1;
+    }else if( strcmp(z,"-codegen")==0 ){
     }else if( strcmp(z,"-bail")==0 ){
       bail_on_error = 1;
     }else if( strcmp(z,"-version")==0 ){

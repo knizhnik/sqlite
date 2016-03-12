@@ -118,6 +118,7 @@ foreach hdr {
    sqliteInt.h
    sqliteLimit.h
    vdbe.h
+   vdbe-gen.h
    vdbeInt.h
    vxworks.h
    wal.h
@@ -321,6 +322,9 @@ foreach file {
    vdbeapi.c
    vdbetrace.c
    vdbe.c
+   vdbe-gen.c
+   vdbe-comp.c
+   vdbe-q1.c
    vdbeblob.c
    vdbesort.c
    memjournal.c

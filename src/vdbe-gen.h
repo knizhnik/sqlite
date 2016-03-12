@@ -1,3 +1,6 @@
+#ifndef _SQLITE_VDBE_GEN_H_
+#define _SQLITE_VDBE_GEN_H_
+
 #include "sqliteInt.h"
 #include "vdbeInt.h"
 
@@ -26,6 +29,12 @@
 # define UPDATE_MAX_BLOBSIZE(P)
 #endif
 
+
+#ifdef SQLITE_DEBUG
+#  define REGISTER_TRACE(R,M) if(db->flags&SQLITE_VdbeTrace)registerTrace(R,M)
+#else
+#  define REGISTER_TRACE(R,M)
+#endif
 
 /*
 ** Convert the given register into a string if it isn't one
@@ -178,34 +187,6 @@ static void applyAffinity(
 }
 
 /*
-** Try to convert the type of a function argument or a result column
-** into a numeric representation.  Use either INTEGER or REAL whichever
-** is appropriate.  But only do the conversion if it is possible without
-** loss of information and return the revised type of the argument.
-*/
-int sqlite3_value_numeric_type(sqlite3_value *pVal){
-  int eType = sqlite3_value_type(pVal);
-  if( eType==SQLITE_TEXT ){
-    Mem *pMem = (Mem*)pVal;
-    applyNumericAffinity(pMem, 0);
-    eType = sqlite3_value_type(pVal);
-  }
-  return eType;
-}
-
-/*
-** Exported version of applyAffinity(). This one works on sqlite3_value*, 
-** not the internal Mem* type.
-*/
-void sqlite3ValueApplyAffinity(
-  sqlite3_value *pVal, 
-  u8 affinity, 
-  u8 enc
-){
-  applyAffinity((Mem *)pVal, affinity, enc);
-}
-
-/*
 ** pMem currently only holds a string type (or maybe a BLOB that we can
 ** interpret as a string if we want to).  Compute its corresponding
 ** numeric type, if has one.  Set the pMem->u.r and pMem->u.i fields
@@ -264,7 +245,13 @@ static Mem *out2Prerelease(Vdbe *p, int p2){
   }
 }
 
+int sqlite3VdbeGenerate(
+	FILE* out, 
+	int qid, 
+	Vdbe *p);
+
 typedef int(*VdbeCompiledQuery)(Vdbe *p);
 extern VdbeCompiledQuery const VdbeCompiledQueryCode[];
-extern char const* const VdbeCompiledQueryText[];
+extern char const*const* const VdbeCompiledQueryText[];
 
+#endif

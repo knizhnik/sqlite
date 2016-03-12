@@ -115,6 +115,35 @@ int sqlite3_found_count = 0;
   }
 #endif
 
+
+/*
+** Try to convert the type of a function argument or a result column
+** into a numeric representation.  Use either INTEGER or REAL whichever
+** is appropriate.  But only do the conversion if it is possible without
+** loss of information and return the revised type of the argument.
+*/
+int sqlite3_value_numeric_type(sqlite3_value *pVal){
+  int eType = sqlite3_value_type(pVal);
+  if( eType==SQLITE_TEXT ){
+    Mem *pMem = (Mem*)pVal;
+    applyNumericAffinity(pMem, 0);
+    eType = sqlite3_value_type(pVal);
+  }
+  return eType;
+}
+
+/*
+** Exported version of applyAffinity(). This one works on sqlite3_value*, 
+** not the internal Mem* type.
+*/
+void sqlite3ValueApplyAffinity(
+  sqlite3_value *pVal, 
+  u8 affinity, 
+  u8 enc
+){
+  applyAffinity((Mem *)pVal, affinity, enc);
+}
+
 /*
 ** An ephemeral string value (signified by the MEM_Ephem flag) contains
 ** a pointer to a dynamically allocated string where some other entity
@@ -243,12 +272,6 @@ static void registerTrace(int iReg, Mem *p){
 }
 #endif
 
-#ifdef SQLITE_DEBUG
-#  define REGISTER_TRACE(R,M) if(db->flags&SQLITE_VdbeTrace)registerTrace(R,M)
-#else
-#  define REGISTER_TRACE(R,M)
-#endif
-
 
 #ifdef VDBE_PROFILE
 
@@ -366,6 +389,28 @@ int sqlite3VdbeExec(
   }
   sqlite3EndBenignMalloc();
 #endif
+
+  if (p->zSql != NULL && strncmp(p->zSql, "select", 6) == 0) { 
+	  if (sqlite3GlobalConfig.bCodeGenerator) {
+		  static int qid = 0;
+		  char file[256];		
+		  FILE* f;
+		  sprintf(file, "src/vdbe-q%d.c", ++qid);
+		  f = fopen(file, "w");
+		  if (!sqlite3VdbeGenerate(f,  qid, p)) { 
+			  unlink(file);
+		  }
+		  fclose(f);
+	  } else { 
+		  int i;
+		  for (i = 0; VdbeCompiledQueryText[i] != NULL; i++) {
+			  if (strcmp(*VdbeCompiledQueryText[i], p->zSql) == 0) {
+				  return VdbeCompiledQueryCode[i](p);
+			  }
+		  }
+	  }
+  }
+	
   for(pOp=&aOp[p->pc]; 1; pOp++){
     /* Errors are detected by individual opcodes, with an immediate
     ** jumps to abort_due_to_error. */
@@ -440,18 +485,6 @@ int sqlite3VdbeExec(
     pOrigOp = pOp;
 #endif
   
-	if (sqlite3GenerateC) {
-		static int qid = 0;
-		FILE* f = fopen("vdbe-%d.c", ++qid);
-		sqlite3VdbeGenerate(f,  qid, p);
-		fclose(p);
-	} else { 
-		for (i = 0; VdbCompiledQueryText[i] != NULL; i++) {
-			if (strcmp(VdbCompiledQueryText[i], p->zSql) == 0) {
-				return VdbCompileddQueryCode[i](p);
-			}
-		}
-	}
     switch( pOp->opcode ){
 
 /*****************************************************************************

@@ -1862,6 +1862,7 @@ struct sqlite3_mem_methods {
 #define SQLITE_CONFIG_PCACHE_HDRSZ        24  /* int *psz */
 #define SQLITE_CONFIG_PMASZ               25  /* unsigned int szPma */
 #define SQLITE_CONFIG_STMTJRNL_SPILL      26  /* int nByte */
+#define SQLITE_CONFIG_CODEGEN      27  /* boolean */
 
 /*
 ** CAPI3REF: Database Connection Configuration Options
