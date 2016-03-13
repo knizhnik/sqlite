@@ -182,7 +182,7 @@ LIBOBJS0 = alter.lo analyze.lo attach.lo auth.lo \
          random.lo resolve.lo rowset.lo rtree.lo select.lo sqlite3rbu.lo status.lo \
          table.lo threads.lo tokenize.lo treeview.lo trigger.lo \
          update.lo util.lo vacuum.lo \
-         vdbe.lo vdbe-gen.lo vdbe-comp.lo vdbe-q1.lo vdbeapi.lo vdbeaux.lo vdbeblob.lo vdbemem.lo vdbesort.lo \
+         vdbe.lo vdbe-gen.lo vdbe-comp.lo vdbe-q1.lo vdbe-q2.lo vdbeapi.lo vdbeaux.lo vdbeblob.lo vdbemem.lo vdbesort.lo \
          vdbetrace.lo wal.lo walker.lo where.lo wherecode.lo whereexpr.lo \
          utf.lo vtab.lo
 
@@ -284,6 +284,7 @@ SRC = \
   $(TOP)/src/vdbe-gen.h \
   $(TOP)/src/vdbe-comp.c \
   $(TOP)/src/vdbe-q1.c \
+  $(TOP)/src/vdbe-q2.c \
   $(TOP)/src/vdbeapi.c \
   $(TOP)/src/vdbeaux.c \
   $(TOP)/src/vdbeblob.c \
@@ -469,6 +470,7 @@ TESTSRC2 = \
   $(TOP)/src/vdbe-gen.c \
   $(TOP)/src/vdbe-comp.c \
   $(TOP)/src/vdbe-q1.c \
+  $(TOP)/src/vdbe-q2.c \
   $(TOP)/src/vdbemem.c \
   $(TOP)/src/vdbetrace.c \
   $(TOP)/src/where.c \
@@ -871,6 +873,9 @@ vdbe-comp.lo:	$(TOP)/src/vdbe-comp.c $(HDR)
 
 vdbe-q1.lo:	$(TOP)/src/vdbe-q1.c $(HDR)
 	$(LTCOMPILE) $(TEMP_STORE) -c $(TOP)/src/vdbe-q1.c
+
+vdbe-q2.lo:	$(TOP)/src/vdbe-q2.c $(HDR)
+	$(LTCOMPILE) $(TEMP_STORE) -c $(TOP)/src/vdbe-q2.c
 
 vdbeapi.lo:	$(TOP)/src/vdbeapi.c $(HDR)
 	$(LTCOMPILE) $(TEMP_STORE) -c $(TOP)/src/vdbeapi.c
