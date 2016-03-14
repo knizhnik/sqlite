@@ -16,7 +16,7 @@ static void printCommand(FILE* out, Op *pOp, Op *aOp, char const* body)
 	fputs("do {", out);
 	while (body[1] != '\0') { 
 		if (PREFCMP(body, "pOp->")) { 
-			p = body + 5;
+			p = body += 5;
 			if (PREFCMP(p, "p1")) fprintf(out, "%d", pOp->p1);
 			else if (PREFCMP(p, "p2")) fprintf(out, "%d", pOp->p2);
 			else if (PREFCMP(p, "p3")) fprintf(out, "%d", pOp->p3);
@@ -33,28 +33,29 @@ static void printCommand(FILE* out, Op *pOp, Op *aOp, char const* body)
 			else if (PREFCMP(p, "p4.p")) fprintf(out, "p->aOp[%d].p4.p", (int)(pOp - aOp));
 			else if (PREFCMP(p, "p4.x")) fprintf(out, "p->aOp[%d].p4.x", (int)(pOp - aOp));
 			else assert(false);
-			body = p + strlen(s);
 		} else if (PREFCMP(body, "op_column_")) { 
 			fprintf(out, "op%d_column_", (int)(pOp - aOp));
-			body += strlen(s);
 		} else if (PREFCMP(body, "fp_math")) { 
 			fprintf(out, "fp%d_math", (int)(pOp - aOp));
-			body += strlen(s);
 		} else if (PREFCMP(body, "next_tail")) { 
 			fprintf(out, "next_tail%d", (int)(pOp - aOp));
-			body += strlen(s);
 		} else if (PREFCMP(body, "seek_not_found")) { 
 			fprintf(out, "seek_not_found%d", (int)(pOp - aOp));
-			body += strlen(s);
 		} else if (PREFCMP(body, "open_cursor_set_hints")) { 
 			fprintf(out, "open_cursor_set_hints%d", (int)(pOp - aOp));
-			body += strlen(s);
 		} else if (PREFCMP(body, "arithmetic_result_is_null")) { 
 			fprintf(out, "arithmetic_result_is_null%d", (int)(pOp - aOp));
-			body += strlen(s);
+		} else if (PREFCMP(body, "jump_to_p1")) { 
+			fprintf(out, "L%d", pOp->p1);
+		} else if (PREFCMP(body, "jump_to_p2")) { 
+			fprintf(out, "L%d", pOp->p2);
+		} else if (PREFCMP(body, "jump_to_p3")) { 
+			fprintf(out, "L%d", pOp->p3);
 		} else { 
 			putc(*body++ & 0xFF, out);
+			continue;
 		}
+		body += strlen(s);
 	}
 	fputs("} while(0);\n", out);
 }
@@ -150,7 +151,7 @@ int sqlite3VdbeGenerate(
 	  switch( pOp->opcode ){
 CASE(OP_Goto, 
 ({             /* jump */
-  goto *labels[pOp->p2];
+  goto jump_to_p2;
 }
 
 /* Opcode:  Gosub P1 P2 * * *
@@ -167,7 +168,7 @@ CASE(OP_Goto,
   pIn1->flags = MEM_Int;
   pIn1->u.i = (int)(pOp->pc);
   REGISTER_TRACE(pOp->p1, pIn1);
-  goto *labels[pOp->p2];
+  goto jump_to_p2;
 }
 
 /* Opcode:  Return P1 * * * *
@@ -204,7 +205,7 @@ CASE(OP_Goto,
   assert( !VdbeMemDynamic(pOut) );
   pOut->u.i = pOp->p3 - 1;
   pOut->flags = MEM_Int;
-  if( pOp->p2 ) goto *labels[pOp->p2];
+  if( pOp->p2 ) goto jump_to_p2;
 }
 
 /* Opcode:  EndCoroutine P1 * * * *
@@ -1123,7 +1124,7 @@ CASE(OP_ShiftRight,
         rc = SQLITE_MISMATCH;
         goto abort_due_to_error;
       }else{
-        goto *labels[pOp->p2];
+        goto jump_to_p2;
       }
     }
   }
@@ -1308,7 +1309,7 @@ CASE(OP_Ge,
       }else{
         VdbeBranchTaken(2,3);
         if( pOp->p5 & SQLITE_JUMPIFNULL ){
-          goto *labels[pOp->p2];
+          goto jump_to_p2;
         }
       }
 	  break;
@@ -1374,7 +1375,7 @@ CASE(OP_Ge,
   }else{
     VdbeBranchTaken(res!=0, (pOp->p5 & SQLITE_NULLEQ)?2:3);
     if( res ){
-      goto *labels[pOp->p2];
+      goto jump_to_p2;
     }
   }
 }
@@ -1463,11 +1464,11 @@ CASE(OP_Ge,
 ))CASE(OP_Jump, 
 ({             /* jump */
   if( iCompare<0 ){
-    VdbeBranchTaken(0,3); goto *labels[pOp->p1];
+    VdbeBranchTaken(0,3); goto jump_to_p1;
   }else if( iCompare==0 ){
-    VdbeBranchTaken(1,3); goto *labels[pOp->p2];
+    VdbeBranchTaken(1,3); goto jump_to_p2;
   }else{
-    VdbeBranchTaken(2,3); goto *labels[pOp->p3];
+    VdbeBranchTaken(2,3); goto jump_to_p3;
   }
 }
 
@@ -1578,7 +1579,7 @@ CASE(OP_Or,
   assert( pOp->p1<p->nOnceFlag );
   VdbeBranchTaken(p->aOnceFlag[pOp->p1]!=0, 2);
   if( p->aOnceFlag[pOp->p1] ){
-    goto *labels[pOp->p2];
+    goto jump_to_p2;
   }else{
     p->aOnceFlag[pOp->p1] = 1;
   }
@@ -1614,7 +1615,7 @@ CASE(OP_IfNot,
   }
   VdbeBranchTaken(c!=0, 2);
   if( c ){
-    goto *labels[pOp->p2];
+    goto jump_to_p2;
   }
 }
 
@@ -1628,7 +1629,7 @@ CASE(OP_IfNot,
   pIn1 = &aMem[pOp->p1];
   VdbeBranchTaken( (pIn1->flags & MEM_Null)!=0, 2);
   if( (pIn1->flags & MEM_Null)!=0 ){
-    goto *labels[pOp->p2];
+    goto jump_to_p2;
   }
 }
 
@@ -1642,7 +1643,7 @@ CASE(OP_IfNot,
   pIn1 = &aMem[pOp->p1];
   VdbeBranchTaken( (pIn1->flags & MEM_Null)==0, 2);
   if( (pIn1->flags & MEM_Null)==0 ){
-    goto *labels[pOp->p2];
+    goto jump_to_p2;
   }
 }
 
@@ -2847,7 +2848,7 @@ CASE(OP_OpenEphemeral,
   pC = p->apCsr[pOp->p1];
   assert( isSorter(pC) );
   if( (pC->seqCount++)==0 ){
-    goto *labels[pOp->p2];
+    goto jump_to_p2;
   }
 }
 
@@ -3047,7 +3048,7 @@ CASE(OP_SeekGT,
         /* If the P3 value cannot be converted into any kind of a number,
         ** then the seek is not possible, so jump to P2 */
         VdbeBranchTaken(1,2); 
-		goto *labels[pOp->p2];
+		goto jump_to_p2;
       }
 
       /* If the approximation iKey is larger than the actual real search
@@ -3157,7 +3158,7 @@ seek_not_found:
   assert( pOp->p2>0 );
   VdbeBranchTaken(res!=0,2);
   if( res ){
-    goto *labels[pOp->p2];
+    goto jump_to_p2;
   }else if( eqOnly ){
     goto *labels[pOp->pc+2]; /* Skip the OP_IdxLt or OP_IdxGT that follows */
   }
@@ -3298,10 +3299,10 @@ CASE(OP_Found,
   pC->cacheStatus = CACHE_STALE;
   if( pOp->opcode==OP_Found ){
     VdbeBranchTaken(alreadyExists!=0,2);
-    if( alreadyExists ) goto *labels[pOp->p2];
+    if( alreadyExists ) goto jump_to_p2;
   }else{
     VdbeBranchTaken(takeJump||alreadyExists==0,2);
-    if( takeJump || !alreadyExists ) goto *labels[pOp->p2];
+    if( takeJump || !alreadyExists ) goto jump_to_p2;
   }
 }
 
@@ -3358,7 +3359,7 @@ CASE(OP_Found,
     if( pOp->p2==0 ){
       rc = SQLITE_CORRUPT_BKPT;
     }else{
-      goto *labels[pOp->p2];
+      goto jump_to_p2;
     }
   }
   if( rc ) goto abort_due_to_error;
@@ -3761,7 +3762,7 @@ CASE(OP_InsertInt,
   rc = sqlite3VdbeSorterCompare(pC, pIn3, nKeyCol, &res);
   VdbeBranchTaken(res!=0,2);
   if( rc ) goto abort_due_to_error;
-  if( res ) goto *labels[pOp->p2];
+  if( res ) goto jump_to_p2;
 };
 
 /* Opcode: SorterData P1 P2 P3 * *
@@ -3990,7 +3991,7 @@ CASE(OP_RowData,
   if( rc ) goto abort_due_to_error;
   if( pOp->p2>0 ){
     VdbeBranchTaken(res!=0,2);
-    if( res ) goto *labels[pOp->p2];
+    if( res ) goto jump_to_p2;
   }
 }
 
@@ -4056,7 +4057,7 @@ CASE(OP_Sort,
   pC->nullRow = (u8)res;
   assert( pOp->p2>0 && pOp->p2<p->nOp );
   VdbeBranchTaken(res!=0,2);
-  if( res ) goto *labels[pOp->p2];
+  if( res ) goto jump_to_p2;
 }
 
 /* Opcode: Next P1 P2 P3 P4 P5
@@ -4176,7 +4177,7 @@ CASE(OP_SorterNext,
 	  sqlite3_search_count++;
 	  #endif
 	  if( db->u1.isInterrupted ) goto abort_due_to_interrupt;
-	  goto *labels[pOp->p2];
+	  goto jump_to_p2;
   }else{
 	  pC->nullRow = 1;
   }
@@ -4446,7 +4447,7 @@ CASE(OP_IdxGE,
   }
   VdbeBranchTaken(res>0,2);
   if( rc ) goto abort_due_to_error;
-  if( res>0 ) goto *labels[pOp->p2];
+  if( res>0 ) goto jump_to_p2;
 }
 
 /* Opcode: Destroy P1 P2 P3 * *
@@ -4813,7 +4814,7 @@ CASE(OP_CreateTable,
     sqlite3VdbeMemSetNull(pIn1);
     VdbeBranchTaken(1,2);
 	if( db->u1.isInterrupted ) goto abort_due_to_interrupt;
-    goto *labels[pOp->p2];
+    goto jump_to_p2;
   }else{
     /* A value was pulled from the index */
     VdbeBranchTaken(0,2);
@@ -4869,7 +4870,7 @@ CASE(OP_CreateTable,
   if( iSet ){
     exists = sqlite3RowSetTest(pIn1->u.pRowSet, iSet, pIn3->u.i);
     VdbeBranchTaken(exists!=0,2);
-    if( exists ) goto *labels[pOp->p2];
+    if( exists ) goto jump_to_p2;
   }
   if( iSet>=0 ){
     sqlite3RowSetInsert(pIn1->u.pRowSet, pIn3->u.i);
@@ -4912,10 +4913,10 @@ CASE(OP_CreateTable,
 ({         /* jump */
   if( pOp->p1 ){
     VdbeBranchTaken(db->nDeferredCons==0 && db->nDeferredImmCons==0, 2);
-    if( db->nDeferredCons==0 && db->nDeferredImmCons==0 ) goto *labels[pOp->p2];
+    if( db->nDeferredCons==0 && db->nDeferredImmCons==0 ) goto jump_to_p2;
   }else{
     VdbeBranchTaken(p->nFkConstraint==0 && db->nDeferredImmCons==0, 2);
-    if( p->nFkConstraint==0 && db->nDeferredImmCons==0 ) goto *labels[pOp->p2];
+    if( p->nFkConstraint==0 && db->nDeferredImmCons==0 ) goto jump_to_p2;
   }
 }
 #endif /* #ifndef SQLITE_OMIT_FOREIGN_KEY */
@@ -4968,7 +4969,7 @@ CASE(OP_CreateTable,
   VdbeBranchTaken( pIn1->u.i>0, 2);
   if( pIn1->u.i>0 ){
     pIn1->u.i -= pOp->p3;
-    goto *labels[pOp->p2];
+    goto jump_to_p2;
   }
 }
 
@@ -5015,7 +5016,7 @@ CASE(OP_CreateTable,
   VdbeBranchTaken(pIn1->u.i<0, 2);
   if( pIn1->u.i ){
      pIn1->u.i -= pOp->p3;
-     goto *labels[pOp->p2];
+     goto jump_to_p2;
   }
 }
 
@@ -5031,7 +5032,7 @@ CASE(OP_CreateTable,
   assert( pIn1->flags&MEM_Int );
   pIn1->u.i--;
   VdbeBranchTaken(pIn1->u.i==0, 2);
-  if( pIn1->u.i==0 ) goto *labels[pOp->p2];
+  if( pIn1->u.i==0 ) goto jump_to_p2;
 }
 
 
@@ -5047,7 +5048,7 @@ CASE(OP_CreateTable,
   pIn1 = &aMem[pOp->p1];
   assert( pIn1->flags&MEM_Int );
   VdbeBranchTaken(pIn1->u.i==0, 2);
-  if( (pIn1->u.i++)==0 ) goto *labels[pOp->p2];
+  if( (pIn1->u.i++)==0 ) goto jump_to_p2;
 }
 
 /* Opcode: AggStep0 * P2 P3 P4 P5
@@ -5355,7 +5356,7 @@ CASE(OP_CreateTable,
   VdbeBranchTaken(rc==SQLITE_DONE,2);
   if( rc ){
     if( rc!=SQLITE_DONE ) goto abort_due_to_error;
-    goto *labels[pOp->p2];
+    goto jump_to_p2;
   }
 }
 #endif
@@ -5570,7 +5571,7 @@ CASE(OP_CreateTable,
   res = pModule->xEof(pVCur);
   pCur->nullRow = 0;
   VdbeBranchTaken(res!=0,2);
-  if( res ) goto *labels[pOp->p2];
+  if( res ) goto jump_to_p2;
 }
 /* Opcode: VColumn P1 P2 P3 * *
 ** Synopsis: r[P3]=vcolumn(P2)
@@ -5651,7 +5652,7 @@ CASE(OP_CreateTable,
   if( db->u1.isInterrupted ) goto abort_due_to_interrupt;
   if( !res ){
     /* If there is data, jump to P2 */
-    goto *labels[pOp->p2];
+    goto jump_to_p2;
   }
   }
 }
@@ -5813,7 +5814,7 @@ CASE(OP_CreateTable,
 */
 ))CASE(OP_Init, 
 ({          /* jump */
-  if( pOp->p2 ) goto *labels[pOp->p2];
+  if( pOp->p2 ) goto jump_to_p2;
 }
 
 #ifdef SQLITE_ENABLE_CURSOR_HINTS
