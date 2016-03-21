@@ -70,6 +70,8 @@ group by
 order by
     l_returnflag,
     l_linestatus;
+
+
 select
     sum(l_extendedprice*l_discount) as revenue
 from

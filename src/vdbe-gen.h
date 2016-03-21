@@ -255,7 +255,7 @@ extern VdbeCompiledQuery const VdbeCompiledQueryCode[];
 extern char const*const* const VdbeCompiledQueryText[];
 
 
-static int sqlite3VdbeGetColumn(Vdbe *p, Op* pOp) 
+static int sqlite3VdbeGetColumn(Vdbe *p, Op* pOp, int nColumns) 
 {
   int rc = SQLITE_OK;
   i64 payloadSize64; /* Number of bytes in the record */
@@ -281,12 +281,15 @@ static int sqlite3VdbeGetColumn(Vdbe *p, Op* pOp)
   pC = p->apCsr[pOp->p1];
   p2 = pOp->p2;
 
+  for (i = 1; i < nColumns; i++) {
+	  if (pOp[i].p2 > p2) { 
+		  p2 = pOp[i].p2;
+	  }
+  }
   /* If the cursor cache is stale, bring it up-to-date */
   rc = sqlite3VdbeCursorMoveto(&pC, &p2);
 
   assert( pOp->p3>0 && pOp->p3<=(p->nMem-p->nCursor) );
-  pDest = &p->aMem[pOp->p3];
-  memAboutToChange(p, pDest);
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
   assert( pC!=0 );
   assert( p2<pC->nField );
@@ -307,8 +310,14 @@ static int sqlite3VdbeGetColumn(Vdbe *p, Op* pOp)
         pC->payloadSize = pC->szRow = avail = pReg->n;
         pC->aRow = (u8*)pReg->z;
       }else{
-        sqlite3VdbeMemSetNull(pDest);
-        goto op_column_out;
+		  for (i = 0; i < nColumns; i++, pOp++) {
+			  pDest = &p->aMem[pOp->p3];
+			  memAboutToChange(p, pDest);
+			  sqlite3VdbeMemSetNull(pDest);
+			  UPDATE_MAX_BLOBSIZE(pDest);
+			  REGISTER_TRACE(pOp->p3, pDest);
+		  }
+		  goto op_column_out;
       }
     }else{
       assert( pC->eCurType==CURTYPE_BTREE );
@@ -436,12 +445,18 @@ static int sqlite3VdbeGetColumn(Vdbe *p, Op* pOp)
     ** columns.  So the result will be either the default value or a NULL.
     */
     if( pC->nHdrParsed<=p2 ){
-      if( pOp->p4type==P4_MEM ){
-        sqlite3VdbeMemShallowCopy(pDest, pOp->p4.pMem, MEM_Static);
-      }else{
-        sqlite3VdbeMemSetNull(pDest);
-      }
-      goto op_column_out;
+		for (i = 0; i < nColumns; i++, pOp++) {
+			pDest = &p->aMem[pOp->p3];
+			memAboutToChange(p, pDest);
+			if( pOp->p4type==P4_MEM ){
+				sqlite3VdbeMemShallowCopy(pDest, pOp->p4.pMem, MEM_Static);
+			}else{
+				sqlite3VdbeMemSetNull(pDest);
+			}
+			UPDATE_MAX_BLOBSIZE(pDest);
+			REGISTER_TRACE(pOp->p3, pDest);
+		}
+		goto op_column_out;
     }
   }else{
     t = pC->aType[p2];
@@ -451,65 +466,72 @@ static int sqlite3VdbeGetColumn(Vdbe *p, Op* pOp)
   ** reach this point if aOffset[p2], aOffset[p2+1], and pC->aType[p2] are
   ** all valid.
   */
-  assert( p2<pC->nHdrParsed );
-  assert( rc==SQLITE_OK );
-  assert( sqlite3VdbeCheckMemInvariants(pDest) );
-  if( VdbeMemDynamic(pDest) ) sqlite3VdbeMemSetNull(pDest);
-  assert( t==pC->aType[p2] );
-  pDest->enc = encoding;
-  if( pC->szRow>=aOffset[p2+1] ){
-    /* This is the common case where the desired content fits on the original
-    ** page - where the content is not on an overflow page */
-    zData = pC->aRow + aOffset[p2];
-    if( t<12 ){
-      sqlite3VdbeSerialGet(zData, t, pDest);
-    }else{
-      /* If the column value is a string, we need a persistent value, not
-      ** a MEM_Ephem value.  This branch is a fast short-cut that is equivalent
-      ** to calling sqlite3VdbeSerialGet() and sqlite3VdbeDeephemeralize().
-      */
-      static const u16 aFlag[] = { MEM_Blob, MEM_Str|MEM_Term };
-      pDest->n = len = (t-12)/2;
-      if( pDest->szMalloc < len+2 ){
-        pDest->flags = MEM_Null;
-        if( sqlite3VdbeMemGrow(pDest, len+2, 0) ) { 
-			rc = SQLITE_NOMEM_BKPT;
-			goto abort_due_to_error;
-		}
-      }else{
-        pDest->z = pDest->zMalloc;
-      }
-      memcpy(pDest->z, zData, len);
-      pDest->z[len] = 0;
-      pDest->z[len+1] = 0;
-      pDest->flags = aFlag[t&1];
-    }
-  }else{
-    /* This branch happens only when content is on overflow pages */
-    if( ((pOp->p5 & (OPFLAG_LENGTHARG|OPFLAG_TYPEOFARG))!=0
-          && ((t>=12 && (t&1)==0) || (pOp->p5 & OPFLAG_TYPEOFARG)!=0))
-     || (len = sqlite3VdbeSerialTypeLen(t))==0
-    ){
-      /* Content is irrelevant for
-      **    1. the typeof() function,
-      **    2. the length(X) function if X is a blob, and
-      **    3. if the content length is zero.
-      ** So we might as well use bogus content rather than reading
-      ** content from disk. */
-      static u8 aZero[8];  /* This is the bogus content */
-      sqlite3VdbeSerialGet(aZero, t, pDest);
-    }else{
-      rc = sqlite3VdbeMemFromBtree(pCrsr, aOffset[p2], len, !pC->isTable,
-                                   pDest);
-      if( rc!=SQLITE_OK ) goto abort_due_to_error;
-      sqlite3VdbeSerialGet((const u8*)pDest->z, t, pDest);
-      pDest->flags &= ~MEM_Ephem;
-    }
-  }
 
+  for (i = 0; i < nColumns; i++, pOp++) {
+	  pDest = &p->aMem[pOp->p3];
+	  memAboutToChange(p, pDest);
+	  p2 = pOp->p2;
+	  t=pC->aType[p2];
+
+	  assert( p2<pC->nHdrParsed );
+	  assert( rc==SQLITE_OK );
+	  assert( sqlite3VdbeCheckMemInvariants(pDest) );
+	  if( VdbeMemDynamic(pDest) ) sqlite3VdbeMemSetNull(pDest);
+	  assert( t==pC->aType[p2] );
+	  pDest->enc = encoding;
+	  if( pC->szRow>=aOffset[p2+1] ){
+		  /* This is the common case where the desired content fits on the original
+		  ** page - where the content is not on an overflow page */
+		  zData = pC->aRow + aOffset[p2];
+		  if( t<12 ){
+			  sqlite3VdbeSerialGet(zData, t, pDest);
+		  }else{
+			  /* If the column value is a string, we need a persistent value, not
+			  ** a MEM_Ephem value.  This branch is a fast short-cut that is equivalent
+			  ** to calling sqlite3VdbeSerialGet() and sqlite3VdbeDeephemeralize().
+			  */
+			  static const u16 aFlag[] = { MEM_Blob, MEM_Str|MEM_Term };
+			  pDest->n = len = (t-12)/2;
+			  if( pDest->szMalloc < len+2 ){
+				  pDest->flags = MEM_Null;
+				  if( sqlite3VdbeMemGrow(pDest, len+2, 0) ) { 
+					  rc = SQLITE_NOMEM_BKPT;
+					  goto abort_due_to_error;
+				  }
+			  }else{
+				  pDest->z = pDest->zMalloc;
+			  }
+			  memcpy(pDest->z, zData, len);
+			  pDest->z[len] = 0;
+			  pDest->z[len+1] = 0;
+			  pDest->flags = aFlag[t&1];
+		  }
+	  }else{
+		  /* This branch happens only when content is on overflow pages */
+		  if( ((pOp->p5 & (OPFLAG_LENGTHARG|OPFLAG_TYPEOFARG))!=0
+			   && ((t>=12 && (t&1)==0) || (pOp->p5 & OPFLAG_TYPEOFARG)!=0))
+			  || (len = sqlite3VdbeSerialTypeLen(t))==0
+			  ){
+			  /* Content is irrelevant for
+			  **    1. the typeof() function,
+			  **    2. the length(X) function if X is a blob, and
+			  **    3. if the content length is zero.
+			  ** So we might as well use bogus content rather than reading
+			  ** content from disk. */
+			  static u8 aZero[8];  /* This is the bogus content */
+			  sqlite3VdbeSerialGet(aZero, t, pDest);
+		  }else{
+			  rc = sqlite3VdbeMemFromBtree(pCrsr, aOffset[p2], len, !pC->isTable,
+										   pDest);
+			  if( rc!=SQLITE_OK ) goto abort_due_to_error;
+			  sqlite3VdbeSerialGet((const u8*)pDest->z, t, pDest);
+			  pDest->flags &= ~MEM_Ephem;
+		  }
+	  }
+	  UPDATE_MAX_BLOBSIZE(pDest);
+	  REGISTER_TRACE(pOp->p3, pDest);
+  }
 op_column_out:
-  UPDATE_MAX_BLOBSIZE(pDest);
-  REGISTER_TRACE(pOp->p3, pDest);
 abort_due_to_error:
   return rc;
 }

@@ -1,5 +1,6 @@
 #define CASE(op,body) case op: printCommand(out, pOp, aOp, #body); continue;
 #define CODE(body) printCode(out, #body)
+#define COMMAND(body) printCommand(out, pOp, aOp, #body)
 
 #define PREFCMP(p,pref) strncmp(p, s = pref, sizeof(pref)-1) == 0
 
@@ -7,6 +8,8 @@ static void printCode(FILE* out, char const* body)
 {
 	fprintf(out, "%.*s\n", (int)strlen(body)-2, body+1); /* skip "(...)" */
 }
+
+static int nColumns;
 
 static void printCommand(FILE* out, Op *pOp, Op *aOp, char const* body)
 {
@@ -33,6 +36,8 @@ static void printCommand(FILE* out, Op *pOp, Op *aOp, char const* body)
 			else if (PREFCMP(p, "p4.p")) fprintf(out, "p->aOp[%d].p4.p", (int)(pOp - aOp));
 			else if (PREFCMP(p, "p4.x")) fprintf(out, "p->aOp[%d].p4.x", (int)(pOp - aOp));
 			else assert(false);
+		} else if (PREFCMP(body, "nColumns")) { 
+			fprintf(out, "%d", nColumns);
 		} else if (PREFCMP(body, "fp_math")) { 
 			fprintf(out, "fp%d_math", (int)(pOp - aOp));
 		} else if (PREFCMP(body, "next_tail")) { 
@@ -1670,12 +1675,16 @@ CASE(OP_IfNot,
 ** or typeof() function, respectively.  The loading of large blobs can be
 ** skipped for length() and all content loading can be skipped for typeof().
 */
-))CASE(OP_Column, 
-({
-	int rc = sqlite3VdbeGetColumn(p, &p->aOp[pOp->pc]); 
-	int p1 = pOp->p1;
-	int p2 = pOp->p2;
-	int p3 = pOp->p3;
+))
+case OP_Column:
+{
+	Op* op;
+	nColumns=1;
+	for(op=pOp+1; op < eOp && op->p1 == pOp->p1 && op->opcode == OP_Column; nColumns++, op++) {
+		fprintf(out, "L%d:\n", (int)(op - aOp));   
+	}
+	COMMAND((
+	rc = sqlite3VdbeGetColumn(p, &p->aOp[pOp->pc], nColumns); 
 	if (rc != SQLITE_OK) { 
 		if (rc == SQLITE_TOOBIG) { 
 			goto too_big;
@@ -1685,8 +1694,10 @@ CASE(OP_IfNot,
 			goto abort_due_to_error;
 		}
 	}
+	));
+	pOp += nColumns-1;
+    continue;	
 }
-
 /* Opcode: Affinity P1 P2 * P4 *
 ** Synopsis: affinity(r[P1@P2])
 **
@@ -1696,7 +1707,7 @@ CASE(OP_IfNot,
 ** string indicates the column affinity that should be used for the nth
 ** memory cell in the range.
 */
-))CASE(OP_Affinity, 
+CASE(OP_Affinity, 
 ({
   const char *zAffinity;   /* The affinity to be applied */
   char cAff;               /* A single character of affinity */
