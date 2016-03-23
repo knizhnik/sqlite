@@ -10,4 +10,4 @@ create table orders(
     o_comment varchar,
     o_dummy char(1));
 .separator '|'
-.import /home/knizhnik/tpch-dbgen/sqlite> orders.tbl orders
+.import /home/knizhnik/tpch-dbgen/orders.tbl orders

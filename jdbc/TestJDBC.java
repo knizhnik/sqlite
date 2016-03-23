@@ -1,29 +1,5 @@
 import java.sql.*;
 
-class Orders {
-    public int o_orderkey;
-    public int o_custkey;
-    public byte o_orderstatus;
-    public double o_totalprice;
-    public String o_orderdate;
-    public String o_orderpriority;
-    public String o_clerk;
-    public int o_shippriority;
-    public String o_comment;
-
-	public Orders(int orderkey, int custkey, byte orderstatus, double totalprice, String orderdate, String orderpriority, String clerk, int shippriority, String comment) {
-		 o_orderkey = orderkey;
-		 o_custkey = custkey;
-		 o_orderstatus = orderstatus;
-		 o_totalprice = totalprice;
-		 o_orderdate = orderdate;
-		 o_orderpriority = orderpriority;
-		 o_clerk = clerk;
-		 o_shippriority = shippriority;
-		 o_comment = comment;
-	}
-};
-
 public class TestJDBC
 {
   public static void main( String args[] ) throws Exception
@@ -39,6 +15,7 @@ public class TestJDBC
 	
 	PreparedStatement stmt = c.prepareStatement("select * from orders where o_orderkey=?");
 	long start = System.currentTimeMillis();
+	int n = 0;
 	for (int i = 0; i < nIterations; i++) { 
 		int orderkey = (int)(Math.random()*nAccounts);
 		stmt.setInt(1, orderkey);
@@ -53,10 +30,11 @@ public class TestJDBC
 					   rs.getString("o_clerk"),
 					   rs.getInt("o_shippriority"),
 					   rs.getString("o_comment"));
+			n += 1;
 		}
 		rs.close();
 	}
-	System.out.println("Elapsed time: " + (System.currentTimeMillis() - start));
+	System.out.println("Elapsed time for selecting " + n + " objects: " + (System.currentTimeMillis() - start));
 	stmt.close();
 	c.close();
   }
