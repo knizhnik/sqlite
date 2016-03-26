@@ -389,7 +389,7 @@ int sqlite3VdbeExec(
   }
   sqlite3EndBenignMalloc();
 #endif
-
+#if 0
   if (p->zSql != NULL && strncmp(p->zSql, "select", 6) == 0) { 
 	  if (sqlite3GlobalConfig.bCodeGenerator) {
 		  static int qid = 0;
@@ -410,7 +410,7 @@ int sqlite3VdbeExec(
 		  }
 	  }
   }
-	
+#endif	
   for(pOp=&aOp[p->pc]; 1; pOp++){
     /* Errors are detected by individual opcodes, with an immediate
     ** jumps to abort_due_to_error. */

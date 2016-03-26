@@ -6,15 +6,15 @@ public class SQLiteJNIUnsafe {
 
 	static final String getFixedString(Unsafe unsafe, long addr, int size) { 
 		byte[] body = new byte[size];
-		unsafe.copyMemory(null, addr, body, 0, size);		
+		unsafe.copyMemory(null, addr, body, unsafe.arrayBaseOffset(byte[].class), size);		
 		return new String(body);
 	}
 
-	public static void main(String[] args) throws Exception { 
-		Unsafe unsafe;
+	public static void main(String[] args) throws Exception 
+	{ 
 		Constructor cc = Unsafe.class.getDeclaredConstructor();
 		cc.setAccessible(true);
-		unsafe = (Unsafe)cc.newInstance();	    
+		Unsafe unsafe = (Unsafe)cc.newInstance();	    
 		
 		System.loadLibrary("sqlite-jni-unsafe");
 		int nIterations = args.length > 0 ? Integer.parseInt(args[0]) : 1000000;
