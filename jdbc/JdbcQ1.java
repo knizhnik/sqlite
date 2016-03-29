@@ -1,6 +1,7 @@
 import java.sql.*;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.ArrayList;
 
 
 class Lineitem
@@ -70,6 +71,7 @@ public class JdbcQ1
 	HashMap<Lineitem,Agg> map = new HashMap<Lineitem,Agg>();
 	Statement stmt = c.createStatement();
 	ResultSet rs = stmt.executeQuery("select l_returnflag,l_linestatus,l_quantity,l_extendedprice,l_discount,l_tax,l_shipdate from lineitem");
+	ArrayList<Lineitem> list = new ArrayList<Lineitem>();
 	while (rs.next()) {
 		Lineitem l = new Lineitem(
 			(byte)rs.getString(1).charAt(0),
@@ -79,6 +81,12 @@ public class JdbcQ1
 			rs.getDouble(5),
 			rs.getDouble(6),
 			rs.getString(7));
+		list.add(l);
+	}
+	rs.close();
+	System.out.println("Elapsed time for loading: " + (System.currentTimeMillis() - start));
+	start = System.currentTimeMillis();
+	for (Lineitem l : list) {
 		if (l.l_shipdate.compareTo("1998-12-01") <= 0) { 
 			Agg agg = map.get(l);
 			if (agg == null) { 
@@ -95,12 +103,12 @@ public class JdbcQ1
 			agg.count += 1;
 		}
 	}
-	rs.close();
 	for (Map.Entry<Lineitem,Agg> elem : map.entrySet())
 	{
 		Lineitem k = elem.getKey();
 		Agg v = elem.getValue();
 		System.out.print(k.l_returnflag);System.out.print('\t');
+		System.out.print(k.l_linestatus);System.out.print('\t');
 		System.out.print(v.sum_qty);System.out.print('\t');
 		System.out.print(v.sum_base_price);System.out.print('\t');
 		System.out.print(v.sum_charge);System.out.print('\t');
@@ -110,7 +118,6 @@ public class JdbcQ1
 		System.out.println(v.count);
 	}
 	System.out.println("Elapsed time for selecting " + n + " objects: " + (System.currentTimeMillis() - start));
-	stmt.close();
 	c.close();
   }
 }
