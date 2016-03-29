@@ -1,10 +1,12 @@
 import java.sql.*;
+import java.util.Map;
+import java.util.HashMap;
 
 
 class Lineitem
 {
 	public String l_shipdate;
-	public byte l_returnflag,
+	public byte l_returnflag;
     public byte l_linestatus;
 	public double l_quantity;
 	public double l_extendedprice;
@@ -30,7 +32,7 @@ class Lineitem
 		this.l_returnflag = returnflag;
 		this.l_linestatus = linestatus;
 		this.l_quantity = quantity;
-		this.l_extendedprice = endedprice;
+		this.l_extendedprice = extendedprice;
 		this.l_discount = discount;
 		this.l_tax = tax;
 		this.l_shipdate = shipdate;
@@ -59,25 +61,25 @@ public class JdbcQ1
 	int nAccounts = args.length > 1 ? Integer.parseInt(args[1]) : 1500000;
 
 	Class.forName("org.sqlite.JDBC");
-	c = DriverManager.getConnection("jdbc:sqlite:test.db");
+	c = DriverManager.getConnection("jdbc:sqlite:lineitem.db");
 	c.setAutoCommit(false);
 	System.out.println("Opened database successfully");
 	
 	long start = System.currentTimeMillis();
 	int n = 0;
 	HashMap<Lineitem,Agg> map = new HashMap<Lineitem,Agg>();
-
-	ResultSet rs = c.executeQuery("select * from lineitem");
+	Statement stmt = c.createStatement();
+	ResultSet rs = stmt.executeQuery("select l_returnflag,l_linestatus,l_quantity,l_extendedprice,l_discount,l_tax,l_shipdate from lineitem");
 	while (rs.next()) {
 		Lineitem l = new Lineitem(
-			rs.getByte("l_returnflag"),
-			rs.getByte("l_linestatus"),
-			rs.getDouble("l_quantity"),
-			rs.getDouble("l_extendedprice"),
-			rs.getDouble("l_discount"),
-			rs.getDouble("l_tax"),
-			rs.getString("l_shipdate"));
-		if (l_shipdate.compare("1998-12-01") <= 0) { 
+			(byte)rs.getString(1).charAt(0),
+			(byte)rs.getString(2).charAt(0),
+			rs.getDouble(3),
+			rs.getDouble(4),
+			rs.getDouble(5),
+			rs.getDouble(6),
+			rs.getString(7));
+		if (l.l_shipdate.compareTo("1998-12-01") <= 0) { 
 			Agg agg = map.get(l);
 			if (agg == null) { 
 				agg = new Agg();
@@ -94,7 +96,7 @@ public class JdbcQ1
 		}
 	}
 	rs.close();
-	for (HashMap<Lineitem,Agg>.Elem elem : map)
+	for (Map.Entry<Lineitem,Agg> elem : map.entrySet())
 	{
 		Lineitem k = elem.getKey();
 		Agg v = elem.getValue();
