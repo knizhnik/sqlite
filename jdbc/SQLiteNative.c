@@ -36,8 +36,12 @@ int main(int argc, char* argv[])
 	sqlite3 *conn;
 	sqlite3_stmt* stmt;
 	time_t start;
-
+	
+	CHECK(sqlite3_enable_shared_cache(0));
 	CHECK(sqlite3_open("test.db", &conn));
+	CHECK(sqlite3_exec(conn, "PRAGMA cache_size = 20000", NULL, NULL, NULL));
+	CHECK(sqlite3_exec(conn, "PRAGMA journal_mode=WAL", NULL, NULL, NULL));
+	CHECK(sqlite3_exec(conn, "begin transaction", NULL, NULL, NULL));
 	CHECK(sqlite3_prepare_v2(conn, "select * from orders where o_orderkey=?", -1, &stmt, NULL));
 
 	start = getCurrentTime();
@@ -58,6 +62,7 @@ int main(int argc, char* argv[])
 		}
 		CHECK(sqlite3_reset(stmt));	
 	}
+	CHECK(sqlite3_exec(conn, "commit transaction", NULL, NULL, NULL));
 	printf("Elapsed time for %d objects: %ld\n", n, getCurrentTime() - start);
 	return 0;   
 

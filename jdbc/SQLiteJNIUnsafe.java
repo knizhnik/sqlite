@@ -3,6 +3,8 @@ import java.lang.reflect.*;
 
 public class SQLiteJNIUnsafe { 
 	public static native long select(int i);
+	public static native void begin();
+	public static native void commit();
 
 	static final String getFixedString(Unsafe unsafe, long addr, int size) { 
 		byte[] body = new byte[size];
@@ -21,6 +23,7 @@ public class SQLiteJNIUnsafe {
 		int nAccounts = args.length > 1 ? Integer.parseInt(args[1]) : 1500000;
 		long start = System.currentTimeMillis();
 		int n = 0;
+		begin();
 		for (int i = 0; i < nIterations; i++) { 
 			int orderkey = (int)(Math.random()*nAccounts);
 			long o = select(orderkey);
@@ -38,6 +41,7 @@ public class SQLiteJNIUnsafe {
 				n += 1;
 			}
 		}
+		commit();
 		System.out.println("Elapsed time for selecting " + n + " objects: " + (System.currentTimeMillis() - start));
 	}
 }

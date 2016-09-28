@@ -29,14 +29,24 @@ struct Orders {
 
 extern "C" {
 
+JNIEXPORT void Java_SQLiteJNIUnsafe_begin(JNIEnv *env, jobject self)
+{
+	CHECK(sqlite3_open("test.db", &conn));
+	CHECK(sqlite3_exec(conn, "PRAGMA cache_size = 20000", NULL, NULL, NULL));
+	CHECK(sqlite3_exec(conn, "BEGIN TRANSACTION", NULL, NULL, NULL));
+	CHECK(sqlite3_prepare_v2(conn, "select * from orders where o_orderkey=?", -1, &stmt, NULL));
+}
+
+JNIEXPORT void Java_SQLiteJNIUnsafe_commit(JNIEnv *env, jobject self)
+{
+	CHECK(sqlite3_exec(conn, "COMMIT TRANSACTION", NULL, NULL, NULL));
+}
+
+
 JNIEXPORT jlong Java_SQLiteJNIUnsafe_select(JNIEnv *env, jobject self, jint value)
 {
 	jlong result = 0;
 	static Orders o;
-	if (!stmt) {  
-		CHECK(sqlite3_open("test.db", &conn));
-		CHECK(sqlite3_prepare_v2(conn, "select * from orders where o_orderkey=?", -1, &stmt, NULL));
-	}
 	CHECK(sqlite3_bind_int(stmt, 1, value));
 	if (sqlite3_step(stmt) == SQLITE_ROW) {
 		o.o_orderkey = sqlite3_column_int(stmt, 0);

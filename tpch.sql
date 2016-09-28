@@ -19,6 +19,29 @@ create table lineitem(
 .separator '|'
 .import /home/knizhnik/tpch-dbgen/lineitem.tbl lineitem
 .timer ON
+create table lineitem2(
+   l_orderkey integer,
+   l_partkey integer,
+   l_suppkey integer,
+   l_linenumber integer,
+   l_quantity real,
+   l_extendedprice real,
+   l_discount real,
+   l_tax real,
+   l_returnflag integer,
+   l_linestatus integer,
+   l_shipdate date,
+   l_commitdate integer,
+   l_receiptdate integer,
+   l_shipinstruct char(25),
+   l_shipmode char(10),
+   l_comment char(44));
+insert into lineitem2 select l_orderkey,l_partkey,l_suppkey,l_linenumber,l_quantity,l_extendedprice,l_discount,l_tax,unicode(l_returnflag),unicode(l_linestatus),
+cast(substr(l_shipdate,1,4) as integer)*10000+cast(substr(l_shipdate,6,2) as integer)*100+cast(substr(l_shipdate,8,2) as integer),
+cast(substr(l_commitdate,1,4) as integer)*10000+cast(substr(l_commitdate,6,2) as integer)*100+cast(substr(l_commitdate,8,2) as integer),
+cast(substr(l_receiptdate,1,4) as integer)*10000+cast(substr(l_receiptdate,6,2) as integer)*100+cast(substr(l_receiptdate,8,2) as integer),
+l_shipinstruct,l_shipmode,l_comment from lineitem;
+
 Select
     l_returnflag,
     l_linestatus,
@@ -40,6 +63,24 @@ group by
 order by
     l_returnflag,
     l_linestatus;
+
+Select
+    l_returnflag,
+    l_linestatus,
+	count(*)
+from
+    lineitem
+where
+    l_shipdate <= '1998-12-01'
+group by
+    l_returnflag,
+    l_linestatus
+order by
+    l_returnflag,
+    l_linestatus;
+
+
+
 Select
     sum(l_extendedprice*l_discount) as revenue
 from

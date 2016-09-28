@@ -10,17 +10,19 @@ public class TestJDBC
 
 	Class.forName("org.sqlite.JDBC");
 	c = DriverManager.getConnection("jdbc:sqlite:test.db");
-	c.setAutoCommit(false);
 	System.out.println("Opened database successfully");
-	
+	Statement s = c.createStatement();
+	s.execute("PRAGMA cache_size = 20000");	
+	s.execute("PRAGMA journal_mode=WAL");	
+	s.close();
+	c.setAutoCommit(false);
 	PreparedStatement stmt = c.prepareStatement("select * from orders where o_orderkey=?");
 	long start = System.currentTimeMillis();
 	int n = 0;
 	for (int i = 0; i < nIterations; i++) { 
-		int orderkey = (int)(Math.random()*nAccounts);
-		stmt.setInt(1, orderkey);
+		stmt.setInt(1, (int)(Math.random()*nAccounts));
 		ResultSet rs = stmt.executeQuery();
-		if (rs.next()) { 
+		while (rs.next()) { 
 			new Orders(rs.getInt("o_orderkey"), 
 					   rs.getInt("o_custkey"),
 					   rs.getByte("o_orderstatus"),
@@ -36,6 +38,7 @@ public class TestJDBC
 	}
 	System.out.println("Elapsed time for selecting " + n + " objects: " + (System.currentTimeMillis() - start));
 	stmt.close();
+	c.commit();
 	c.close();
   }
 }

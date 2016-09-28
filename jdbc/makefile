@@ -11,10 +11,10 @@ classes: *.java
 libraries: libsqlite-jni.so libsqlite-jni-unsafe.so
 
 libsqlite-jni.so: sqlite-jni.cpp 
-	g++ -g -fPIC -shared $(JNI_INCLUDES) -o libsqlite-jni.so sqlite-jni.cpp -lsqlite3
+	g++ -O2 -g -fPIC -shared $(JNI_INCLUDES) -o libsqlite-jni.so sqlite-jni.cpp -lsqlite3
 
 libsqlite-jni-unsafe.so: sqlite-jni-unsafe.cpp 
-	g++ -g -fPIC -shared $(JNI_INCLUDES) -o libsqlite-jni-unsafe.so sqlite-jni-unsafe.cpp -lsqlite3
+	g++ -O2 -g -fPIC -shared $(JNI_INCLUDES) -o libsqlite-jni-unsafe.so sqlite-jni-unsafe.cpp -lsqlite3
 
 SQLiteNative: SQLiteNative.c
-	gcc -g -o SQLiteNative SQLiteNative.c  -lsqlite3
+	gcc -g -O2 -o SQLiteNative SQLiteNative.c  -lsqlite3
