@@ -23,6 +23,8 @@
 #  define _CRT_RAND_S
 #endif
 
+#define INTERNAL_API(x) sqlite3##x
+
 /*
 ** Include the header file used to customize the compiler options for MSVC.
 ** This should be done first so that it can successfully prevent spurious
@@ -3738,7 +3740,7 @@ u64 sqlite3LogEstToInt(LogEst);
 */
 int sqlite3PutVarint(unsigned char*, u64);
 u8 sqlite3GetVarint(const unsigned char *, u64 *);
-u8 sqlite3GetVarint32(const unsigned char *, u32 *);
+u8 INTERNAL_API(GetVarint32)(const unsigned char *, u32 *);
 int sqlite3VarintLen(u64 v);
 
 /*

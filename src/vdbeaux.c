@@ -4277,7 +4277,7 @@ RecordCompare sqlite3VdbeFindCompare(UnpackedRecord *p){
 ** pCur might be pointing to text obtained from a corrupt database file.
 ** So the content cannot be trusted.  Do appropriate checks on the content.
 */
-int sqlite3VdbeIdxRowid(sqlite3 *db, BtCursor *pCur, i64 *rowid){
+int INTERNAL_API(VdbeIdxRowid)(sqlite3 *db, BtCursor *pCur, i64 *rowid){
   i64 nCellKey = 0;
   int rc;
   u32 szHdr;        /* Size of the header */
@@ -4355,7 +4355,7 @@ idx_rowid_corruption:
 ** is ignored as well.  Hence, this routine only compares the prefixes 
 ** of the keys prior to the final rowid, not the entire key.
 */
-int sqlite3VdbeIdxKeyCompare(
+int INTERNAL_API(VdbeIdxKeyCompare)(
   sqlite3 *db,                     /* Database connection */
   VdbeCursor *pC,                  /* The cursor to compare against */
   UnpackedRecord *pUnpacked,       /* Unpacked version of key */

@@ -968,7 +968,7 @@ u8 sqlite3GetVarint(const unsigned char *p, u64 *v){
 ** single-byte case.  All code should use the MACRO version as 
 ** this function assumes the single-byte case has already been handled.
 */
-u8 sqlite3GetVarint32(const unsigned char *p, u32 *v){
+u8 INTERNAL_API(GetVarint32)(const unsigned char *p, u32 *v){
   u32 a,b;
 
   /* The 1-byte case.  Overwhelmingly the most common.  Handled inline

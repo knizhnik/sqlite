@@ -447,8 +447,8 @@ u32 sqlite3VdbeSerialGet(const unsigned char*, u32, Mem*);
 void sqlite3VdbeDeleteAuxData(sqlite3*, AuxData**, int, int);
 
 int sqlite2BtreeKeyCompare(BtCursor *, const void *, int, int, int *);
-int sqlite3VdbeIdxKeyCompare(sqlite3*,VdbeCursor*,UnpackedRecord*,int*);
-int sqlite3VdbeIdxRowid(sqlite3*, BtCursor*, i64*);
+int INTERNAL_API(VdbeIdxKeyCompare)(sqlite3*,VdbeCursor*,UnpackedRecord*,int*);
+int INTERNAL_API(VdbeIdxRowid)(sqlite3*, BtCursor*, i64*);
 int sqlite3VdbeExec(Vdbe*);
 int sqlite3VdbeList(Vdbe*);
 int sqlite3VdbeHalt(Vdbe*);

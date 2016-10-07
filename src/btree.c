@@ -4273,7 +4273,7 @@ int sqlite3BtreeCursorIsValid(BtCursor *pCur){
 ** 
 ** This routine cannot fail.  It always returns SQLITE_OK.  
 */
-int sqlite3BtreeKeySize(BtCursor *pCur, i64 *pSize){
+int INTERNAL_API(BtreeKeySize)(BtCursor *pCur, i64 *pSize){
   assert( cursorHoldsMutex(pCur) );
   assert( pCur->eState==CURSOR_VALID );
   getCellInfo(pCur);
@@ -4293,7 +4293,7 @@ int sqlite3BtreeKeySize(BtCursor *pCur, i64 *pSize){
 ** It might just as well be a procedure (returning void) but we continue
 ** to return an integer result code for historical reasons.
 */
-int sqlite3BtreeDataSize(BtCursor *pCur, u32 *pSize){
+int INTERNAL_API(BtreeDataSize)(BtCursor *pCur, u32 *pSize){
   assert( cursorOwnsBtShared(pCur) );
   assert( pCur->eState==CURSOR_VALID );
   assert( pCur->iPage>=0 );
@@ -4665,7 +4665,7 @@ int sqlite3BtreeKey(BtCursor *pCur, u32 offset, u32 amt, void *pBuf){
 ** wrong.  An error is returned if "offset+amt" is larger than
 ** the available payload.
 */
-int sqlite3BtreeData(BtCursor *pCur, u32 offset, u32 amt, void *pBuf){
+int INTERNAL_API(BtreeData)(BtCursor *pCur, u32 offset, u32 amt, void *pBuf){
   int rc;
 
 #ifndef SQLITE_OMIT_INCRBLOB
@@ -5060,7 +5060,7 @@ int sqlite3BtreeLast(BtCursor *pCur, int *pRes){
 ** For index tables, the pIdxKey->eqSeen field is set to 1 if there
 ** exists an entry in the table that exactly matches pIdxKey.  
 */
-int sqlite3BtreeMovetoUnpacked(
+int INTERNAL_API(BtreeMovetoUnpacked)(
   BtCursor *pCur,          /* The cursor to be moved */
   UnpackedRecord *pIdxKey, /* Unpacked index key */
   i64 intKey,              /* The table key */
@@ -5380,7 +5380,7 @@ static SQLITE_NOINLINE int btreeNext(BtCursor *pCur, int *pRes){
     return moveToLeftmost(pCur);
   }
 }
-int sqlite3BtreeNext(BtCursor *pCur, int *pRes){
+int INTERNAL_API(BtreeNext)(BtCursor *pCur, int *pRes){
   MemPage *pPage;
   assert( cursorOwnsBtShared(pCur) );
   assert( pRes!=0 );

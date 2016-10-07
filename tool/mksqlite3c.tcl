@@ -322,10 +322,6 @@ foreach file {
    vdbeapi.c
    vdbetrace.c
    vdbe.c
-   vdbe-gen.c
-   vdbe-comp.c
-   vdbe-q1.c
-   vdbe-q2.c
    vdbeblob.c
    vdbesort.c
    memjournal.c
